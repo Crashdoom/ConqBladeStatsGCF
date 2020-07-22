@@ -1,4 +1,4 @@
-const axios = require('axios').default;
+const axios = require('axios');
 const https = require('https');
 
 const agent = new https.Agent({  
@@ -6,21 +6,46 @@ const agent = new https.Agent({
 });
 
 async function getStats(ip, statsUrl) {
+  console.log({
+    msg: `Attempting to retrieve stats for ${ip} from ${statsUrl}`,
+  });
   try {
-    const { data } = await axios.get(`https://${statsUrl}/Stats/RequestServerLoad?login_ip=${ip}`, { httpsAgent: agent });
+    let source = axios.CancelToken.source();
+    setTimeout(() => {
+        source.cancel();
+    }, 1250);
+    const result = await axios.get(`https://${statsUrl}/Stats/RequestServerLoad?login_ip=${ip}`, { httpsAgent: agent, cancelToken: source.token });
+    if (!result || !result.data) {
+      throw new Error('Timed out or no data received');
+    }
+    const data = result.data;
+    console.log({
+      ok: true,
+      msg: `Retrieved stats for ${ip} from ${statsUrl}`,
+    });
     return { ip, online: data.data.current_user_count > 0, ...data };
   } catch (e) {
+    console.error({
+      err: e,
+      msg: `Failed to fetch ${ip} from ${statsUrl}`,
+      res: e.response && e.response.data,
+    });
     return { ip, online: false, err: e.toString() };
   }
 }
 
 async function sendStatsInfo(res, endpoint, data) {
+  let source = axios.CancelToken.source();
+  setTimeout(() => {
+    source.cancel();
+  }, 1250);
   try {
     const result = await axios({
       method: 'post',
-      headers: {'Authorization': 'Bearer REDACTED'},
+      headers: {'Authorization': 'Bearer ADD_BEARER_TOKEN_HERE'},
       url: 'https://api.conqbladestats.com/internal/' + endpoint,
       data,
+      cancelToken: source.token,
     });
     console.log(`[${endpoint}]: ${JSON.stringify({
       cfPost: result.status,
@@ -33,7 +58,9 @@ async function sendStatsInfo(res, endpoint, data) {
         headers: {'Authorization': 'Bearer REDACTED'},
         url: 'https://api.conqbladestats.com/internal/mygames',
         data,
+        cancelToken: source.token,
       },
+      res: e.response && e.response.data,
     })}`);
   }
 }
